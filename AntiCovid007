@@ -1,0 +1,128 @@
+//***** แจกให้ไปทำเล่นได้ โจ๊ะ ๆ *****//
+// ******* ตั้งค่า MP3  ******* //
+#include "SoftwareSerial.h"
+SoftwareSerial mySerial(2, 3);  // 2 tx, 3 rx
+# define Start_Byte 0x7E
+# define Version_Byte 0xFF
+# define Command_Length 0x06
+# define End_Byte 0xEF
+# define Acknowledge 0x00 //Returns info with command 0x41 [0x01: info, 0x00: no info]
+// ******** จบจ้า ********  //
+
+int PIRSensorPin = 7;     // ขา PIR จ้า
+int IRSensorPin = 6;      // ขา IR จ้า
+
+int mp3play = 13;          // ไฟโชวตอนเล่น MP3 Player 
+int moterStatus = 10;   // สั่ง Motor ให้ทำงาน
+int valIRSensor = 0;         
+boolean PIRActiveFlag = false;  // flag of PIR Status
+unsigned long time = millis();
+
+void setup() {
+  
+  pinMode(IRSensorPin, INPUT); // ตั้งขาจ้า IR เป็นเข้า
+  pinMode(PIRSensorPin, INPUT); // ตั้งขาจ้า PIR เป็นเข้า
+  pinMode(moterStatus, OUTPUT);  //  ตั้งขาจ้า Motor เป็นเข้า
+  pinMode(mp3play, OUTPUT); //  ตั้งขาจ้า MP3 เป็นเข้า
+  Serial.begin(19200);
+  mySerial.begin (9600);
+  delay(1000);
+  playFirst();
+}
+
+void loop() 
+{                     
+    chkIRSensor();
+    delay(100);
+    PIRSensor();
+    PIRDelay();
+    delay(100);
+
+} 
+
+//************  คุมเซ็นเซอร์ IR *********//
+void chkIRSensor() {
+    valIRSensor = digitalRead(IRSensorPin); 
+   // Serial.print("valIRSensor = "); 
+   //Serial.println(valIRSensor);
+    if (valIRSensor == 0) { 
+      digitalWrite(moterStatus, HIGH); 
+      delay(500); 
+      digitalWrite(moterStatus, LOW);
+      while(digitalRead(IRSensorPin) == 0) 
+      {
+        //loop until valIRSensor == 0        
+      }
+    } else {
+      digitalWrite(moterStatus, LOW); // สั่งให้ LED ดับ
+//       Serial.println("elseLoop"); // พิมพ์ค่าของตัวแปร valIRSensor
+      delay(100);  
+    }
+}
+//************  จบจ้า *********//
+
+//************  คุม PIR  *********//
+void PIRSensor() {
+    int valPIRSensor= digitalRead(PIRSensorPin);
+    if (valPIRSensor == HIGH && PIRActiveFlag == true) 
+    {
+      PIRActiveFlag = false;
+      play();
+      digitalWrite(mp3play, HIGH);
+      delay(1000) ;
+      Serial.println(valPIRSensor);
+      digitalWrite(mp3play, LOW);     
+
+    } else {
+      digitalWrite(mp3play, LOW);
+      Serial.println(valPIRSensor);
+    }
+
+}
+//**********หน่วงเวลา PIR **********//
+void PIRDelay(){ 
+  static unsigned long Interval1 = millis();
+  Serial.println("loop_befor-mill");
+
+  if((millis()-Interval1) > 15000){
+    Interval1 = millis(); 
+    // Serial.println("PIR Delay Funtion millis 15000 ");
+    PIRActiveFlag = true;
+
+  }
+}
+//************  จบชุด PIR *********//
+
+//************  สั่งการ MP3 ผ่าน Serial *********//
+void playFirst() {
+  execute_CMD(0x3F, 0, 0);  //initial command
+  delay(500);
+  setVolume(20);            // ตั้งความดัง 0-30
+  delay(500);
+
+}
+
+void play() {
+  execute_CMD(0x0D,0,1); 
+  delay(500);
+}
+
+void setVolume(int volume) {
+  execute_CMD(0x06, 0, volume); // Set the volume (0x00~0x30)
+  delay(2000);
+}
+
+void execute_CMD(byte CMD, byte Par1, byte Par2) {
+// Excecute the command and parameters
+  // Calculate the checksum (2 bytes)
+  word checksum = -(Version_Byte + Command_Length + CMD + Acknowledge + Par1 + Par2);
+  // Build the command line
+  byte Command_line[10] = { Start_Byte, Version_Byte, Command_Length, CMD, Acknowledge,
+  Par1, Par2, highByte(checksum), lowByte(checksum), End_Byte};
+  //Send the command line to the module
+  for (byte k=0; k<10; k++) { 
+   mySerial.write( Command_line[k]);
+  }
+}
+
+//************  จบเถอะ *********//
